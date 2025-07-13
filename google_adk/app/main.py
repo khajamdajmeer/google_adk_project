@@ -1,7 +1,7 @@
 from app.core.logging import get_logger
 from fastapi import FastAPI,Response,Body,Depends
 from fastapi import Header,HTTPException
-from app.memory.in_memory import memory_runner
+from app.memory.in_memory import session_manager, memory_runner
 from app.db.session import get_db
 from app.agents.orch_agent import get_orchestrator_agent
 from app.llm.client import run_client_coordiator
@@ -16,6 +16,8 @@ from app.core.middleware import RequestContextMiddleware
 from app.core.context import get_context
 
 root_agent = get_orchestrator_agent()
+
+# Keep a default runner around for generic endpoints or backwards compatibility
 runner = memory_runner(root_agent)
 app = FastAPI()
 app.add_middleware(RequestContextMiddleware)
@@ -34,7 +36,7 @@ def get_patient_id(patient_id : str = Header(...,alias="authtoken")) :
 async def status_check():
     status = {}
     try:
-        status['in_memory_runner'] = runner
+        status['active_sessions'] = list(session_manager.active_runners.keys())
         status['db_status'] = get_db()
         status['request_context'] = get_context()
     except Exception as e:
@@ -54,12 +56,20 @@ async def health_check():
 def chat(patient_id= Depends(get_patient_id),request: str = Body(...)):
     try:
         logger.info('/chat called')
-        # print(patient_id)
-        session_id = "baace8a8-0970-4e42-a3cd-47650e6f0531"
-        request = request + f"patient_id = {patient_id}"
-        res = run_client_coordiator(runner, request, session_id = session_id)
-        # response.status_code = 200
+        
+        # Extract patient ID string from the Dependency return value
+        patient_id_str = patient_id.get("patient_id") if isinstance(patient_id, dict) else str(patient_id)
+        
+        # Use patient_id as the session ID for memory isolation
+        session_id = patient_id_str
+        
+        request = request + f" patient_id = {patient_id_str}"
+        
+        # Get or create an isolated runner for this session
+        session_runner = session_manager.get_or_create_runner(session_id, root_agent)
+        
+        res = run_client_coordiator(session_runner, request, session_id=session_id, user_id=patient_id_str)
         return {"response": res}
     except Exception as e:
-        # response.status_code = 500
+        logger.error(f"Error in /chat endpoint: {e}")
         return {"error": str(e)}
