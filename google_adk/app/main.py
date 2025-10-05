@@ -14,6 +14,7 @@ current_user: ContextVar[dict | None] = ContextVar("current_user", default=None)
 
 from app.core.middleware import RequestContextMiddleware
 from app.core.context import get_context
+from app.api.v1.router import api_router
 
 root_agent = get_orchestrator_agent()
 
@@ -21,6 +22,9 @@ root_agent = get_orchestrator_agent()
 runner = memory_runner(root_agent)
 app = FastAPI()
 app.add_middleware(RequestContextMiddleware)
+
+# Expose REST endpoints
+app.include_router(api_router, prefix="/api/v1")
 
 
 def get_patient_id(patient_id : str = Header(...,alias="authtoken")) :
