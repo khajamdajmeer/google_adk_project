@@ -36,7 +36,7 @@ google_adk/
 ## Setup & Execution
 
 ### Prerequisites
-- Python 3.9+
+- Python 3.11.5
 - Google ADK (`google.adk`)
 - FastAPI (`fastapi`)
 - Uvicorn (`uvicorn`) for running the server
